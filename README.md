@@ -1,427 +1,131 @@
-# LifeVault — Secure Personal Life Management Concierge
+## Problem Statement: The Personal Document Crisis
 
-> Your life, organized. Your data, encrypted. Your agent, always watching out.
+Every adult manages **50+ critical documents**, including insurance policies, medical records, leases, warranties, legal agreements, and financial statements, scattered across email inboxes, phone photos, filing cabinets, and cloud drives. When you urgently need your insurance policy number after a car accident, or your medication list at a new doctor's office, finding it is stressful, slow, and often impossible.
 
-**Track:** Concierge Agents  
-**Course:** Kaggle 5-Day AI Agents: Intensive Vibe Coding Course with Google  
-**Key Concepts:** Multi-Agent ADK, Custom MCP Server, Security, Deployability, Agent Skills/CLI
+**The human cost of disorganization:**
+
+- **70% of People** have experienced a critical document emergency: a missed renewal deadline, a lost policy during a claim, or inability to locate records when needed.
+- **$1,500+ average cost** of a single missed insurance renewal or lapsed warranty claim
+- **15–30 minutes per lookup** when documents are scattered across multiple systems
+- In medical emergencies, **critical allergy and medication information** is often inaccessible to first responders
+
+**Why existing solutions fail:**
+![](https://www.googleapis.com/download/storage/v1/b/kaggle-user-content/o/inbox%2F17205776%2F52b691ea50025eddb2a099c9bb2bd3ab%2FScreenshot%202026-06-27%20at%204.41.42PM.png?generation=1782558769126688&alt=media)
+
+No existing tool combines **AI-powered extraction**, **zero-knowledge encryption**, **semantic search**, and **proactive deadline management** in a single system. That's the gap LifeVault fills.
 
 ---
 
-## Problem Statement
+## Why Agents? From Passive Storage to Active Concierge
 
-Critical personal documents are scattered across email inboxes, phone photos, filing cabinets, and cloud drives. When you urgently need your insurance policy number after a car accident, or your medication list at a new doctor's office, finding it is stressful and slow.
+A traditional app could store and encrypt documents. But it can't **understand** them. It can't extract the renewal date from your insurance policy, warn you 30 days before it expires, or let you share just your allergies with an ER doctor via a time-limited QR code.
 
-**The cost of disorganization:**
+LifeVault uses a multi-agent architecture because the problem naturally decomposes into distinct concerns that benefit from specialized reasoning:
 
-- **70% of Americans** have experienced a critical document emergency (missed deadline, lost policy, inability to locate records) — *National Association of Productivity and Organizing Professionals*
-- Average family manages **50+ critical documents** (insurance, medical, legal, financial) with renewal/expiry dates
-- **$1,500+ average cost** of a missed insurance renewal or lapsed warranty claim
+| Concern | Why an Agent? | Why Not a Script? |
+|---------|--------------|-------------------|
+| **Document ingestion** | Requires LLM reasoning to extract structured data from unstructured text of any format | Regex/templates break on every new document layout |
+| **Quality validation** | A self-correcting loop catches missing fields and improves extraction quality iteratively | Static validation can only check format, not meaning |
+| **Semantic search** | Natural language queries ("what's my car insurance deductible?") need embedding-based retrieval | Keyword search misses synonyms and context |
+| **Deadline monitoring** | Proactive behavior requires an agent that checks deadlines on every interaction and suggests actions | Cron jobs can only send generic reminders |
+| **Secure sharing** | Scoping, expiry enforcement, and QR generation need careful orchestration with safety gates | A simple API endpoint can't enforce user confirmation |
 
-Existing solutions either lack encryption (Google Drive), lack intelligence (password managers), or lack personal document understanding (generic chatbots). None combine **AI-powered extraction, encrypted storage, semantic search, and proactive deadline management** in a single system.
+Most critically, LifeVault's architecture gives each agent **only the MCP tools it needs** — the vault agent can't create shares, the sharing agent can't delete documents. This is **least-privilege access control at the protocol level**, enforced by MCP `tool_filter`, not just by instruction text.
 
-## Why Agentic AI?
+---
 
-A traditional app could store and search documents. But it can't **understand** them. LifeVault uses multi-agent orchestration because the problem has multiple distinct concerns that benefit from specialized agents:
+## Architecture: One Orchestrator, Four Specialists
 
-| Concern | Why an Agent? |
-|---------|--------------|
-| **Document ingestion** | Requires LLM reasoning to extract structured data from unstructured text, plus a quality validation loop |
-| **Semantic search** | Natural language queries need embedding-based retrieval, not keyword matching |
-| **Deadline monitoring** | Proactive behavior requires an agent that checks deadlines on every interaction |
-| **Secure sharing** | Scoping, expiry enforcement, and QR generation need careful orchestration with safety gates |
+![](https://www.googleapis.com/download/storage/v1/b/kaggle-user-content/o/inbox%2F17205776%2F549f9e9689e4b6d7dd5e3b18e3608be0%2Fgpt-image-2_Create_a_visual_architecture_diagram_matching_the_ASCII_version_below._Use_a_too-0.jpg?generation=1782559853627955&alt=media)
 
-A single monolithic agent would lack separation of concerns and couldn't enforce tool-level access control. LifeVault's architecture gives each agent **only the MCP tools it needs** — the vault agent can't create shares, and the sharing agent can't delete documents.
 
-## Architecture
+LifeVault runs seven agents across three ADK patterns — plain `Agent`, `SequentialAgent`, and `LoopAgent` — coordinated by a lightweight orchestrator that never touches storage or sharing directly. It only routes: the **Document Agent** ingests and validates, the **Vault Agent** handles encrypted retrieval and semantic search, the **Advisory Agent** watches deadlines and audit events, and the **Sharing Agent** issues time-limited, revocable shares. All four talk to a custom MCP server exposing 20 tools — never to the database directly.
 
-```
-┌──────────────────────────────────────────────────────────────────────┐
-│                          USER (ADK Web UI)                           │
-└───────────────────────────────┬──────────────────────────────────────┘
-                                │
-                     ┌──────────▼──────────┐
-                     │    Orchestrator      │  root_agent (Gemini Flash)
-                     │    (LLM Agent)       │  Routes + proactive alerts
-                     └──────────┬──────────┘
-          ┌─────────────────────┼────────────────────┬──────────────┐
-          │                     │                    │              │
-┌─────────▼──────────┐  ┌──────▼──────┐  ┌──────────▼───┐  ┌──────▼──────┐
-│  Document Pipeline │  │   Vault     │  │  Advisory    │  │  Sharing    │
-│  (SequentialAgent) │  │   Agent     │  │  Agent       │  │  Agent      │
-│                    │  │             │  │              │  │             │
-│ ┌────────────────┐ │  │ • Search    │  │ • Urgent     │  │ • Create    │
-│ │ Extraction     │ │  │ • List      │  │   deadline   │  │   shares    │
-│ │ Quality Loop   │ │  │ • Get       │  │   checks     │  │ • QR codes  │
-│ │ (LoopAgent)    │ │  │ • Update    │  │ • List       │  │ • Emergency │
-│ │                │ │  │ • Delete    │  │   deadlines  │  │   cards     │
-│ │ ┌──────────┐   │ │  │ • Stats     │  │ • Audit log  │  │ • Revoke    │
-│ │ │Extractor │◄┐ │ │  └──────┬──────┘  └──────┬───────┘  │ • List      │
-│ │ │ Agent    │ │ │ │         │                 │          │             │
-│ │ └────┬─────┘ │ │ │         │                 │          │ ⚠ Safety   │
-│ │      ▼       │ │ │         │                 │          │   confirm   │
-│ │ ┌──────────┐ │ │ │         │                 │          │   before    │
-│ │ │Reviewer  │─┘ │ │         │                 │          │   sharing   │
-│ │ │ Agent    │   │ │         │                 │          └──────┬──────┘
-│ │ └──────────┘   │ │         │                 │                 │
-│ └────────────────┘ │         │                 │                 │
-│        ▼           │         │                 │                 │
-│ ┌────────────────┐ │         │                 │                 │
-│ │ Storer Agent   │ │         │                 │                 │
-│ │ (encrypts &    │ │         │                 │                 │
-│ │  stores)       │ │         │                 │                 │
-│ └───────┬────────┘ │         │                 │                 │
-└─────────┼──────────┘         │                 │                 │
-          └────────────────────┼─────────────────┴─────────────────┘
-                               │
-                    ┌──────────▼──────────┐
-                    │   LifeVault MCP     │  Custom MCP Server (stdio)
-                    │   Server (20 tools) │  Per-agent tool filtering
-                    └──────────┬──────────┘
-                               │
-                ┌──────────────┼──────────────┐
-                │              │              │
-         ┌──────▼───┐   ┌─────▼──────┐  ┌────▼─────────┐
-         │  SQLite   │   │  Gemini    │  │   Crypto     │
-         │  (WAL)    │   │  Embedding │  │   Engine     │
-         │           │   │  API       │  │              │
-         │ • docs    │   │ gemini-    │  │ • AES-256-   │
-         │ • audit   │   │ embedding  │  │   GCM        │
-         │ • shares  │   │ -001       │  │ • PBKDF2     │
-         │ • config  │   │            │  │   (600K)     │
-         └───────────┘   └────────────┘  │ • HMAC-SHA   │
-                                         └──────────────┘
-```
+**Self-correction on the way in.** New documents pass through a `LoopAgent` before they're allowed anywhere near the vault: an Extractor Agent produces structured JSON from raw text, a Reviewer Agent scores it against category-specific required fields, and if the score is too low, feedback goes back to the extractor for another pass (capped at two iterations). A `SequentialAgent` wraps this loop so that storage is the last step, not a parallel one — a document that fails validation architecturally cannot reach the vault. That's the whole point of building it as a pipeline instead of a single call: accuracy is enforced by *structure*, not by hoping the model remembers to check its own work.
 
-### Agent Architecture (7 Agents)
-
-| Agent | Type | Model | Tools | Purpose |
-|-------|------|-------|-------|---------|
-| **Orchestrator** | `Agent` | gemini-2.5-flash | vault_initialize, vault_unlock, vault_stats, check_urgent_deadlines, get_audit_log, get_audit_stats | Routes queries, proactive deadline alerts |
-| **Document Pipeline** | `SequentialAgent` | — | — | Orchestrates extraction → validation → storage |
-| ↳ Extraction Loop | `LoopAgent` (max=2) | — | — | Runs extractor + reviewer in a correction cycle |
-| ↳↳ Extractor | `Agent` | gemini-2.5-flash | (none — pure LLM) | Extracts structured JSON from raw text |
-| ↳↳ Reviewer | `Agent` | gemini-2.5-flash | validate_extraction | Validates quality, approves or requests re-extraction |
-| ↳ Storer | `Agent` | gemini-2.5-flash | store_document, add_deadline, vault_initialize, vault_unlock | Encrypts and stores validated documents |
-| **Vault Agent** | `Agent` | gemini-2.5-flash | search_vault, list_documents, get_document, update_document, delete_document, vault_stats, vault_unlock, vault_initialize | Semantic search, CRUD, statistics |
-| **Advisory Agent** | `Agent` | gemini-2.5-flash | list_deadlines, add_deadline, check_urgent_deadlines, get_audit_log, get_audit_stats, vault_unlock | Proactive deadline monitoring, audit review |
-| **Sharing Agent** | `Agent` | gemini-2.5-flash | create_share, generate_share_qr, generate_emergency_card, revoke_share, list_active_shares, get_document, list_documents, vault_unlock | Secure sharing with safety confirmation gates |
-
-### MCP Server Tools (18 total)
-
-| Group | Tool | Description |
-|-------|------|-------------|
-| **Vault Lifecycle** | `vault_initialize` | Create a new vault with passphrase |
-| | `vault_unlock` | Unlock an existing vault |
-| | `vault_stats` | Get vault statistics |
-| **Document CRUD** | `store_document` | Encrypt and store with embedding generation |
-| | `get_document` | Retrieve and decrypt by ID |
-| | `search_vault` | Semantic search (Gemini embeddings + cosine similarity) |
-| | `list_documents` | List with optional category filter |
-| | `update_document` | Update metadata or content |
-| | `delete_document` | Permanently delete |
-| **Deadlines** | `add_deadline` | Add tracked deadline linked to a document |
-| | `list_deadlines` | Get upcoming deadlines within a time window |
-| | `check_urgent_deadlines` | Proactive urgent deadline check (≤7 days) |
-| **Sharing** | `create_share` | Create time-limited, scoped, HMAC-signed share |
-| | `generate_share_qr` | Generate QR code (ERROR_CORRECT_H) |
-| | `generate_emergency_card` | Emergency medical info card + QR |
-| | `revoke_share` | Immediately revoke an active share |
-| | `list_active_shares` | List non-expired shares |
-| **Audit** | `get_audit_log` | Query immutable audit trail |
-| | `get_audit_stats` | Audit statistics summary |
-| **Validation** | `validate_extraction` | Quality gate for the LoopAgent extraction reviewer |
-
-## Demonstrating Course Mastery
-
-This section maps every key course concept to its implementation in LifeVault.
-
-### 1. Multi-Agent System (ADK)
-
-LifeVault uses **7 agents** across 3 ADK agent types:
+**Least privilege at the protocol level, not just in the prompt.** Every agent connects to the MCP server with its own `tool_filter`, so the permission boundary is enforced by the protocol layer itself:
 
 ```python
-# Root orchestrator with sub-agent delegation
-root_agent = Agent(
-    name="lifevault",
-    model="gemini-2.5-flash",
-    sub_agents=[document_agent, vault_agent, advisory_agent, sharing_agent],
-    tools=[_mcp(tool_filter=["vault_initialize", "vault_unlock", ...])],
+sharing_agent = Agent(
+    tools=[_mcp(tool_filter=[
+        "create_share", "generate_share_qr",
+        "revoke_share", "list_active_shares", "get_document",
+    ])],
 )
 ```
 
-Each sub-agent has a focused `description` that ADK uses for routing. The orchestrator never directly handles document storage or sharing — it delegates to the specialist.
+The sharing agent above simply has no `delete_document` tool to call — there's no instruction telling it not to, because the capability doesn't exist in its toolset. The vault agent's tool_filter is the mirror image: it can search and retrieve, but `create_share` isn't in its list. This is the difference between "the agent was told not to" and "the agent physically can't," and it's the architectural decision the rest of the security story rests on.
 
-### 2. LoopAgent — Self-Correcting Extraction
+---
 
-Inspired by the NewsPulse AI Agent's citation verification loop, LifeVault uses a `LoopAgent` to validate document extractions:
+## Security, By Design
 
-```python
-# Extraction quality loop: extract → validate → (re-extract if needed)
-extraction_loop = LoopAgent(
-    name="extraction_quality_loop",
-    sub_agents=[doc_extractor, doc_reviewer],
-    max_iterations=2,  # Controls token cost
-)
-```
+| Feature | Implementation | Standard |
+|---|---|---|
+| Encryption at rest | AES-256-GCM, random 12-byte nonce per operation | NIST SP 800-38D |
+| Key derivation | PBKDF2-HMAC-SHA256, 600,000 iterations | OWASP 2024 guidance |
+| Secure sharing | HMAC-SHA256 signed tokens, time-limited, revocable | RFC 2104 |
+| Embedding security | Vectors encrypted at rest; decrypted only in memory to compute similarity, then discarded | — |
+| Audit trail | Append-only SQLite log, metadata only, never content | SOC 2 pattern |
+| Access control | MCP `tool_filter` per agent | Zero-trust |
 
-The reviewer agent calls the `validate_extraction` MCP tool, which checks required fields per document category and computes a quality score. If validation fails, the loop sends feedback to the extractor for re-extraction.
+One deliberate tradeoff: document titles and categories stay in plaintext so the vault can filter without a full decrypt on every list view. Everything else — content, raw text, embeddings — is encrypted. Documented, not accidental.
 
-### 3. SequentialAgent — Document Pipeline
+---
 
-The complete ingestion pipeline enforces ordering: validate first, then store.
+## See It Work: One Document's Journey
 
-```python
-document_agent = SequentialAgent(
-    name="document_agent",
-    sub_agents=[extraction_loop, doc_storer],
-)
-```
+![](https://www.googleapis.com/download/storage/v1/b/kaggle-user-content/o/inbox%2F17205776%2Fb51d3a8dfb2ed8138a7b56280ffc162f%2Fdoc%20process%20in%20lifevault.jpg?generation=1783263191443732&alt=media)
 
-No document enters the vault without passing the quality gate — a security-by-design pattern.
+A scanned dental insurance PDF gets dropped into LifeVault. The Extractor Agent pulls provider, policy number, and renewal date — but on the first pass it misses the policy number entirely. The Reviewer Agent scores the extraction **62/100**, flags the missing field by name, and kicks it back. Second pass: the extractor finds the policy number lower in the document, and the score comes back **94/100** — above threshold, so the `SequentialAgent` lets it proceed to encrypted storage. Total time: about 3 seconds, at roughly $0.002 in model cost.
 
-### 4. Custom MCP Server
+A week later: *"What's my dental deductible?"* — the Vault Agent decrypts the relevant embedding in memory, matches it semantically (no exact keyword overlap needed), and returns the answer in under a second.
 
-20 tools organized into 6 groups, served via `FastMCP` over stdio transport:
+Twenty-nine days before the policy renews, the Advisory Agent surfaces it unprompted on the next interaction. And if this were an allergy or medication record instead of a dental policy, the same pipeline feeds the Sharing Agent's emergency-card flow: a QR code, scoped to only the medical fields, expiring in 30 days, requiring explicit confirmation before it's generated at all.
 
-```python
-# Per-agent tool filtering — each agent sees only its tools
-tools=[_mcp(tool_filter=["store_document", "add_deadline"])]
-```
+That's the loop the whole system is built around: extract, validate, store, retrieve, and — only when asked, and only what's needed — share.
 
-This enforces separation of concerns at the protocol level.
+---
 
-### 5. Security Features
+## The Build
 
-| Feature | Implementation |
-|---------|---------------|
-| Encryption at rest | AES-256-GCM with 12-byte random nonce |
-| Key derivation | PBKDF2-HMAC-SHA256, 600,000 iterations (OWASP 2024) |
-| Secure sharing | HMAC-SHA256 signed, time-limited, revocable tokens |
-| Audit trail | Append-only SQLite log (metadata only, never content) |
-| Tool-level access control | MCP `tool_filter` scopes each agent's capabilities |
-| Sharing safety gate | Agent instruction requires user confirmation before any share |
+| Component | Choice | Why |
+|---|---|---|
+| Agent framework | Google ADK 1.0+ | Native `SequentialAgent` / `LoopAgent` orchestration |
+| LLM | Gemini 2.5 Flash | Fast and cheap enough for per-document extraction |
+| Embeddings | gemini-embedding-001 | 1536-dim, strong enough for personal-document search |
+| MCP framework | FastMCP 2.0+ | Clean tool decorators, native stdio transport |
+| Database | SQLite (WAL mode) | Zero-dependency, right-sized for personal-scale data |
+| Encryption | Python `cryptography` | AES-256-GCM + PBKDF2, OWASP-recommended |
+| Deployment | Docker + Cloud Run | One-command deploy, Secret Manager for keys |
 
-### 6. Deployability
+Cost stays low by design: roughly **$0.002** to ingest a document with full LoopAgent validation, **$0.0005** per search, and an embedding generation costs a fraction of a cent — enough headroom to store hundreds of documents and run thousands of searches for a couple of dollars total. The CLI (14 subcommands) works standalone, with zero LLM calls, so the vault layer is provably usable even if the agent layer is down — and the same commands double as the test harness behind the 32 passing tests across the six areas that matter most: extraction, encryption, search, sharing, deadlines, and audit logging.
 
-- **Dockerfile**: Multi-stage build (builder → slim runtime), 512Mi memory
-- **docker-compose.yml**: One-command local deployment
-- **Cloud Run**: `deploy/deploy.sh` + `deploy/cloudrun.yaml` with Secret Manager
-- **Health checks**: Startup and liveness probes configured
+---
 
-### 7. Agent Skills / CLI
+## What This Changes
 
-Standalone `cli.py` with **14 subcommands** that talks directly to the vault (no LLM needed for most operations):
+| | Without LifeVault | With LifeVault |
+|---|---|---|
+| Finding a document | Digging through email, photos, cabinets | Semantic search, under 10 seconds |
+| Catching a renewal | After the claim is denied | 30-day proactive warning |
+| Sharing with a provider | An emailed PDF, no expiry, no control | Scoped, time-limited, revocable, QR-coded |
+| Emergency medical info | A wallet card — outdated, losable | Live QR code, auto-renewed |
+| Encryption | None, on Drive or in email | AES-256-GCM end to end |
 
-```
-init, unlock, store, search, list, get, update, delete,
-deadlines, add-deadline, share, emergency-card, audit, stats
-```
+The same architecture generalizes past personal use — HIPAA-adjacent sharing with audit trails, or claims tracking with real deadline enforcement — but the core bet is simpler than any of that: agents are worth the added complexity here specifically *because* the problem is understanding, validation, and judgment, not just storage.
 
-Plus full ADK CLI support: `adk run agents/` and `adk web agents/`.
-
-## Security Design
-
-### Encryption at Rest (AES-256-GCM)
-
-```
-User Passphrase
-      │
-      ▼
-   PBKDF2 (600,000 iterations, 16-byte salt)
-      │
-      ▼
-   256-bit AES Key (memory-only, never stored)
-      │
-      ├──▶ encrypt(extracted_data)  → stored as base64 ciphertext
-      ├──▶ encrypt(raw_text)        → stored as base64 ciphertext
-      └──▶ encrypt(embedding[1536]) → stored as base64 ciphertext
-```
-
-**What's encrypted:** Document content, raw text, embedding vectors  
-**What's plaintext:** Category, title (enables efficient filtering — documented tradeoff)  
-**Key derivation:** PBKDF2-HMAC-SHA256, 600,000 iterations (OWASP 2024 recommendation)  
-**Nonce:** 12-byte random per encryption operation (GCM standard)
-
-### Semantic Search Security Tradeoff
-
-Embeddings are encrypted at rest. For search, they are decrypted into memory, cosine similarity is computed, and plaintext vectors are discarded. At personal-vault scale (~500 documents), this adds <10ms latency.
-
-### Secure Sharing (HMAC-SHA256)
-
-Shares use HMAC-signed JSON payloads with mandatory expiration. Scopes (`full`, `summary`, `emergency`) limit data exposure. QR codes use ERROR_CORRECT_H for physical durability. All shares are logged in the audit trail.
-
-## Evaluation
-
-### Test Suite
-
-```bash
-python -m pytest tests/ -v
-```
-
-**32 tests** across 6 categories:
-
-| Category | Tests | Coverage |
-|----------|-------|----------|
-| Crypto (AES-256-GCM) | 9 | Key derivation, encrypt/decrypt, nonce uniqueness, wrong-key rejection |
-| Storage (SQLite) | 8 | Initialize/unlock, CRUD, deadlines, stats, update |
-| Audit (append-only) | 3 | Log/retrieve, statistics, append-only integrity |
-| Sharing (HMAC) | 5 | Create/retrieve, revoke, expiry, active listing, QR generation |
-| Validation (LoopAgent) | 4 | Category-specific field requirements, quality scoring |
-| Edge Cases | 3 | Unicode documents, empty data, large documents (100KB+) |
-
-### Token Efficiency
-
-LifeVault is designed to minimize API costs:
-
-- **Model:** `gemini-2.5-flash` (~$0.15/M input tokens)
-- **LoopAgent max_iterations:** 2 (caps extraction cost at ~$0.002/document)
-- **Embeddings:** `gemini-embedding-001` with retry + backoff (batch-efficient)
-- **Typical session:** ~10K tokens total (~$0.0015)
-
-## Setup
-
-### Prerequisites
-
-- Python 3.10+
-- Google Gemini API key ([get one here](https://aistudio.google.com/apikey))
-
-### Local Installation
-
-```bash
-git clone https://github.com/YOUR_USERNAME/lifevault.git
-cd lifevault
-
-python3 -m venv venv
-source venv/bin/activate   # macOS/Linux
-pip install -r requirements.txt
-
-cp .env.example .env
-# Edit .env and add your GOOGLE_API_KEY
-```
-
-### Run with ADK Web UI
-
-```bash
-adk web agents/
-# Open http://localhost:8000
-```
-
-### Run with ADK CLI
-
-```bash
-adk run agents/
-```
-
-### Run with LifeVault CLI
-
-```bash
-python cli.py init                    # Initialize vault
-python cli.py store --category insurance --title "Car Insurance" \
-  --text "State Farm policy SF-2026-789456, $500 deductible"
-python cli.py search "car insurance"  # Semantic search
-python cli.py list                    # List all documents
-python cli.py deadlines --days 60     # Check deadlines
-python cli.py audit --limit 10        # View audit log
-python cli.py stats                   # Vault statistics
-```
-
-### Load Demo Data
-
-```bash
-python demo_data.py
-# Default passphrase: MySecureVault2026!
-```
-
-### Docker
-
-```bash
-cp .env.example .env   # Add your GOOGLE_API_KEY
-docker compose up --build
-# Open http://localhost:8000
-```
-
-### Deploy to Cloud Run
-
-```bash
-./deploy/deploy.sh YOUR_GCP_PROJECT_ID YOUR_GOOGLE_API_KEY
-```
-
-## Business Impact
-
-If deployed as a consumer product, LifeVault addresses a market of **130M+ US households** managing critical documents:
-
-| Metric | Value |
-|--------|-------|
-| Average documents per household | 50+ critical documents |
-| Average cost of missed renewal/deadline | $1,500+ |
-| Time saved per document lookup | 15-30 minutes vs. manual search |
-| Share security improvement | Time-limited + encrypted vs. emailing PDFs |
-
-For enterprise/healthcare use cases: HIPAA-compliant document sharing with audit trails, patient emergency cards, and insurance claim management.
-
-## Innovation Beyond Requirements
-
-1. **Self-correcting document extraction** — LoopAgent validates every extraction before storage, catching missing fields and improving data quality iteratively
-2. **Proactive deadline guardian** — The orchestrator checks for urgent deadlines on every interaction, not just when asked
-3. **Emergency medical cards** — QR-coded medical info (allergies, conditions, medications, blood type, contacts) that first responders can scan in emergencies
-4. **Tool-level access control** — MCP `tool_filter` enforces that each agent can only access its designated tools, implementing least-privilege at the protocol level
-5. **Sharing safety gates** — The sharing agent's instruction requires explicit user confirmation before creating any share, implementing a human-in-the-loop pattern for sensitive operations
+---
 
 ## If I Had More Time
 
-- **Antigravity IDE integration** for visual agent debugging and flow tracing
-- **ParallelAgent** for concurrent search + deadline check on vault unlock
-- **LongRunningFunctionTool** with `request_confirmation()` for true HITL safety gates on destructive operations
-- **Custom BaseAgent** (non-LLM) for deterministic operations like encryption and deadline calculations
-- **FAISS/ScaNN** integration for production-scale encrypted vector search
-- **Multi-vault support** with per-vault access policies
-- **Document versioning** with diff tracking and rollback
-- **OCR pipeline** for scanned document images
-- **Webhook notifications** for deadline alerts via email/SMS
+- Swap instruction-based sharing confirmation for `LongRunningFunctionTool` + `request_confirmation()` — true human-in-the-loop rather than a prompted promise
+- A `ParallelAgent` for running search and deadline checks concurrently on vault unlock
+- An OCR pipeline for scanned insurance cards and receipts, not just clean text
+- FAISS/ScaNN for encrypted vector search at real scale, and multi-vault support for households
 
-## Project Structure
+---
 
-```
-lifevault/
-├── agents/                    # ADK multi-agent system
-│   ├── __init__.py           # Exports root_agent
-│   └── agent.py              # 7 agents: SequentialAgent + LoopAgent + 4 LLM agents
-├── mcp_server/               # Custom MCP Server (20 tools)
-│   ├── __init__.py
-│   ├── __main__.py           # python -m mcp_server entry point
-│   ├── server.py             # FastMCP server with 20 tools + validation logic
-│   ├── storage.py            # Encrypted SQLite storage layer
-│   ├── crypto.py             # AES-256-GCM + PBKDF2 encryption
-│   ├── embeddings.py         # Gemini embeddings + cosine search + retry
-│   ├── audit.py              # Append-only audit logger
-│   └── sharing.py            # HMAC-signed time-limited shares + QR
-├── tests/
-│   └── test_mcp_server.py    # 32 unit tests across 6 categories
-├── deploy/
-│   ├── cloudrun.yaml         # Cloud Run service definition
-│   └── deploy.sh             # One-command Cloud Run deployment
-├── cli.py                    # Standalone CLI (14 subcommands)
-├── demo_data.py              # Pre-populate vault with sample documents
-├── Dockerfile                # Multi-stage production image
-├── docker-compose.yml        # Local Docker deployment
-├── .env.example              # Environment template
-├── requirements.txt
-└── README.md
-```
+## Final Word
 
-## Technologies
-
-- **Google ADK** — Agent Development Kit (`Agent`, `SequentialAgent`, `LoopAgent`)
-- **Google Gemini** — LLM (gemini-2.5-flash) + embeddings (gemini-embedding-001)
-- **FastMCP** — MCP server framework for tool exposure over stdio
-- **SQLite** — Encrypted document storage with WAL mode
-- **cryptography** — AES-256-GCM encryption, PBKDF2 key derivation
-- **NumPy** — Cosine similarity computation for semantic search
-- **qrcode** — QR code generation with ERROR_CORRECT_H
-- **Docker** — Multi-stage containerized builds
-- **Google Cloud Run** — Serverless deployment with Secret Manager
-
-## License
-
-MIT
+The moment LifeVault is built for is always the same shape: something goes wrong, and the information you need is technically *somewhere*, just not anywhere you can reach in time. An agent that reads, validates, watches, and shares — carefully, and only what's asked — turns that moment from a scramble into a 10-second lookup.
