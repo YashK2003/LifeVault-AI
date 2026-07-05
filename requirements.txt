@@ -1,7 +1,13 @@
 # Google ADK - Agent Development Kit
 google-adk>=1.0.0
 
-# MCP Server
+# Google Gemini API (new unified SDK)
+google-genai>=1.0.0
+
+# MCP protocol
+mcp>=1.0.0
+
+# MCP Server framework
 fastmcp>=2.0.0
 
 # Encryption
@@ -15,9 +21,6 @@ qrcode[pil]>=8.0
 
 # Environment variables
 python-dotenv>=1.0.0
-
-# Web UI
-mesop>=0.14.0
 
 # Utilities
 pydantic>=2.0.0

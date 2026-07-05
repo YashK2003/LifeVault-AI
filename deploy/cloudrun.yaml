@@ -1,0 +1,66 @@
+# ============================================================
+# LifeVault — Google Cloud Run Service Definition
+# ============================================================
+# Demonstrates the "Deployability" course concept.
+#
+# Deploy:
+#   gcloud run services replace deploy/cloudrun.yaml --region=us-central1
+#
+# Or build & deploy in one step:
+#   gcloud run deploy lifevault \
+#     --source . \
+#     --region us-central1 \
+#     --allow-unauthenticated \
+#     --set-env-vars GOOGLE_API_KEY=your-key-here
+# ============================================================
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: lifevault
+  labels:
+    cloud.googleapis.com/location: us-central1
+  annotations:
+    run.googleapis.com/description: "LifeVault — Secure Personal Life Management Concierge"
+spec:
+  template:
+    metadata:
+      annotations:
+        autoscaling.knative.dev/minScale: "0"
+        autoscaling.knative.dev/maxScale: "3"
+        run.googleapis.com/startup-cpu-boost: "true"
+    spec:
+      containerConcurrency: 80
+      timeoutSeconds: 300
+      containers:
+        - image: gcr.io/PROJECT_ID/lifevault:latest
+          ports:
+            - containerPort: 8000
+          env:
+            - name: GOOGLE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: gemini-api-key
+                  key: latest
+            - name: GOOGLE_GENAI_MODEL
+              value: "gemini-2.5-flash"
+            - name: GOOGLE_GENAI_USE_VERTEXAI
+              value: "FALSE"
+            - name: VAULT_DB_PATH
+              value: "/app/vault_data/vault.db"
+          resources:
+            limits:
+              memory: "512Mi"
+              cpu: "1"
+          startupProbe:
+            httpGet:
+              path: /
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 10
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 8000
+            periodSeconds: 30

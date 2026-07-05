@@ -1,0 +1,32 @@
+# ============================================================
+# LifeVault — Docker Compose
+# ============================================================
+# Quick local deployment:
+#   1. Copy .env.example to .env and add your GOOGLE_API_KEY
+#   2. docker compose up --build
+#   3. Open http://localhost:8000
+# ============================================================
+
+services:
+  lifevault:
+    build: .
+    container_name: lifevault
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      - GOOGLE_GENAI_USE_VERTEXAI=FALSE
+      - VAULT_DB_PATH=/app/vault_data/vault.db
+    volumes:
+      # Persist vault data across container restarts
+      - vault_data:/app/vault_data
+      # Persist generated QR codes
+      - qr_output:/app/generated_qr
+    restart: unless-stopped
+
+volumes:
+  vault_data:
+    driver: local
+  qr_output:
+    driver: local

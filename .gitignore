@@ -14,6 +14,7 @@ env/
 
 # Environment variables (NEVER commit API keys)
 .env
+agents/.env
 
 # IDE
 .vscode/
@@ -24,6 +25,13 @@ env/
 # OS
 .DS_Store
 Thumbs.db
+
+# ADK session data
+.adk/
+agents/.adk/
+
+# E2E test artifacts
+test_e2e_vault.db
 
 # LifeVault data (encrypted vault files)
 *.db

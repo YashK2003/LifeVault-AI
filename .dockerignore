@@ -1,0 +1,40 @@
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Environment files with secrets
+.env
+agents/.env
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Runtime data (should not be baked into image)
+*.db
+*.db-journal
+vault_data/
+generated_qr/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+
+# Test cache
+.pytest_cache/
+
+# Docker
+Dockerfile
+docker-compose.yml
+deploy/
